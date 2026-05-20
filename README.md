@@ -59,6 +59,8 @@ oral-lesion-screening/
 cd oral-lesion-screening/backend
 python -m venv .venv
 source .venv/bin/activate
+pip install --upgrade pip
+pip install --index-url https://download.pytorch.org/whl/cpu torch==2.3.1 torchvision==0.18.1
 pip install -r requirements.txt
 cp .env.example .env
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
@@ -249,6 +251,8 @@ Backend 建議建立 Web Service：
 2. Build Command：
 
 ```bash
+pip install --upgrade pip
+pip install --index-url https://download.pytorch.org/whl/cpu torch==2.3.1 torchvision==0.18.1
 pip install -r requirements.txt
 ```
 

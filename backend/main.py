@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+from threading import Lock
 from contextlib import asynccontextmanager
 from io import BytesIO
 from pathlib import Path
@@ -12,8 +13,6 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image, UnidentifiedImageError
 
-from predict import load_trained_model, predict_image
-
 
 load_dotenv()
 
@@ -21,6 +20,7 @@ LOGGER = logging.getLogger("oral_lesion_screening")
 logging.basicConfig(level=logging.INFO)
 
 MODEL_PATH = Path(__file__).with_name("best_hierarchical_convnext_mac.pth")
+MODEL_LOCK = Lock()
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/jpg", "image/png"}
 DISCLAIMER = (
     "本系統僅作為口腔影像初步風險篩檢與衛教輔助工具，不能取代醫師診斷、"
@@ -98,15 +98,32 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.model = None
     app.state.device = None
     app.state.model_load_error = None
-    try:
-        model, device = load_trained_model(MODEL_PATH)
-        app.state.model = model
-        app.state.device = device
-        LOGGER.info("Model loaded on device: %s", device)
-    except Exception as exc:
-        app.state.model_load_error = str(exc)
-        LOGGER.exception("Model loading failed.")
     yield
+
+
+def get_model() -> tuple[Any, Any]:
+    if app.state.model is not None and app.state.device is not None:
+        return app.state.model, app.state.device
+
+    with MODEL_LOCK:
+        if app.state.model is not None and app.state.device is not None:
+            return app.state.model, app.state.device
+        try:
+            from predict import load_trained_model
+
+            model, device = load_trained_model(MODEL_PATH)
+            app.state.model = model
+            app.state.device = device
+            app.state.model_load_error = None
+            LOGGER.info("Model loaded on device: %s", device)
+            return model, device
+        except Exception as exc:
+            app.state.model_load_error = str(exc)
+            LOGGER.exception("Model loading failed.")
+            raise HTTPException(
+                status_code=503,
+                detail="Model is not available. Please check backend logs.",
+            ) from exc
 
 
 app = FastAPI(
@@ -143,12 +160,6 @@ def health() -> Dict[str, Any]:
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)) -> Dict[str, Any]:
-    if app.state.model is None or app.state.device is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Model is not available. Please check backend startup logs.",
-        )
-
     if file.content_type and file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(
             status_code=400,
@@ -169,7 +180,10 @@ async def predict(file: UploadFile = File(...)) -> Dict[str, Any]:
             detail="Unable to read the uploaded image.",
         )
 
-    result = predict_image(image, app.state.model, app.state.device)
+    model, device = get_model()
+    from predict import predict_image
+
+    result = predict_image(image, model, device)
     result["explanation"] = generate_explanation(
         prediction=result["prediction"],
         confidence=result["confidence"],
