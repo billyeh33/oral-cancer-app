@@ -48,7 +48,7 @@ def generate_explanation(
 ) -> str:
     fallback = _fallback_explanation(prediction, risk_level)
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    if not api_key:
+    if not api_key or api_key == "your_gemini_api_key_here":
         return fallback
 
     prompt = f"""
