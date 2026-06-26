@@ -111,6 +111,7 @@ http://localhost:8000
 
 ```env
 GEMINI_API_KEY=your_gemini_api_key_here
+# GOOGLE_API_KEY=your_google_api_key_here
 GEMINI_MODEL=gemini-2.5-flash
 CORS_ALLOW_ORIGINS=*
 ```
@@ -118,6 +119,7 @@ CORS_ALLOW_ORIGINS=*
 說明：
 
 - `GEMINI_API_KEY` 只放在 backend。
+- 如果你的部署平台已使用 Google SDK 慣例，也可以改用 `GOOGLE_API_KEY`。
 - 沒有設定 `GEMINI_API_KEY` 時，API 仍可正常運作，會回傳 fallback explanation。
 - 開發期可暫用 `CORS_ALLOW_ORIGINS=*`。
 - 正式部署時建議改成指定前端網域，例如 Vercel 網址。

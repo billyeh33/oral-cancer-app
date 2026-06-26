@@ -27,5 +27,6 @@ export interface PredictionResponse {
   };
   stage_probabilities: StageProbabilities;
   explanation: string;
+  care_guidance: string;
   disclaimer: string;
 }

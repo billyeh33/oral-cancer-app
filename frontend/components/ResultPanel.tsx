@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart3, FileText, ShieldCheck } from "lucide-react";
+import { BarChart3, FileText, ShieldCheck, Stethoscope } from "lucide-react";
 import type { PredictionResponse, RiskLevel } from "../lib/types";
 import { DisclaimerBanner } from "./DisclaimerBanner";
 
@@ -104,6 +104,14 @@ export function ResultPanel({ result }: ResultPanelProps) {
             </small>
           </div>
         </div>
+      </article>
+
+      <article className="detail-card explanation-card">
+        <div className="section-kicker">
+          <Stethoscope size={18} />
+          AI 就診建議
+        </div>
+        <p>{result.care_guidance}</p>
       </article>
 
       <article className="detail-card explanation-card">
