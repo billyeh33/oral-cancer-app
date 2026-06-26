@@ -2,7 +2,6 @@
 
 import { BarChart3, FileText, ShieldCheck, Stethoscope } from "lucide-react";
 import type { PredictionResponse, RiskLevel } from "../lib/types";
-import { DisclaimerBanner } from "./DisclaimerBanner";
 
 interface ResultPanelProps {
   result: PredictionResponse;
@@ -121,8 +120,6 @@ export function ResultPanel({ result }: ResultPanelProps) {
         </div>
         <p>{result.explanation}</p>
       </article>
-
-      <DisclaimerBanner text={result.disclaimer} />
     </section>
   );
 }
