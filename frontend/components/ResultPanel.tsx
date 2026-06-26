@@ -62,9 +62,6 @@ const SECTION_LABELS = [
   "關於口腔癌：",
   "關於良性病變：",
   "關於正常影像：",
-  "同時，",
-  "再次提醒，",
-  "請務必遵循醫囑",
 ];
 
 function formatPercent(value: number) {
@@ -116,7 +113,7 @@ function cleanInlineText(text: string) {
 
 function splitTitle(text: string) {
   const cleaned = cleanInlineText(text);
-  const match = cleaned.match(/^([^：:。！？]{2,30})[：:]\s*(.+)$/);
+  const match = cleaned.match(/^([^：:。！？]{2,30})[：:]\s*(.*)$/);
 
   if (!match) {
     return { text: cleaned };
@@ -126,6 +123,31 @@ function splitTitle(text: string) {
     title: match[1].trim(),
     text: match[2].trim(),
   };
+}
+
+function addBreakBeforeSectionLabel(text: string, label: string) {
+  let result = text;
+  let searchFrom = 0;
+
+  while (true) {
+    const index = result.indexOf(label, searchFrom);
+    if (index === -1) {
+      return result;
+    }
+
+    const previous = result.slice(Math.max(0, index - 36), index);
+    const alreadySeparated = index === 0 || /\n\s*$/.test(previous);
+    const insideNumberedTitle = /\d+\.\s*[^。！？\n]*$/.test(previous);
+    const insideSentence = /[，、：:]\s*$/.test(previous);
+
+    if (alreadySeparated || insideNumberedTitle || insideSentence) {
+      searchFrom = index + label.length;
+      continue;
+    }
+
+    result = `${result.slice(0, index)}\n${result.slice(index)}`;
+    searchFrom = index + label.length + 1;
+  }
 }
 
 function pushParagraphs(blocks: TextBlock[], text: string) {
@@ -199,7 +221,7 @@ function toReadableBlocks(text: string): TextBlock[] {
     .trim();
 
   SECTION_LABELS.forEach((label) => {
-    normalized = normalized.replaceAll(label, `\n${label}`);
+    normalized = addBreakBeforeSectionLabel(normalized, label);
   });
 
   const lines = normalized
