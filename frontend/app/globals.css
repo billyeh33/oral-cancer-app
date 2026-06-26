@@ -566,9 +566,41 @@ main {
   font-size: 14px;
 }
 
-.explanation-card p {
+.formatted-advice {
+  color: var(--muted);
+  display: grid;
   font-size: 16px;
+  gap: 14px;
+  line-height: 1.95;
+}
+
+.formatted-advice p {
   margin: 0;
+}
+
+.formatted-step {
+  align-items: start;
+  background: #f7fafb;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 34px 1fr;
+  padding: 14px 16px;
+}
+
+.formatted-step span {
+  align-items: center;
+  background: var(--mint);
+  border-radius: 999px;
+  color: var(--teal-deep);
+  display: inline-flex;
+  font-size: 14px;
+  font-weight: 900;
+  height: 28px;
+  justify-content: center;
+  line-height: 1;
+  width: 28px;
 }
 
 @media (max-width: 980px) {

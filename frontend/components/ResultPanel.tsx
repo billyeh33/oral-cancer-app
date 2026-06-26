@@ -21,8 +21,128 @@ const CLASS_LABELS = [
   "Oral Cancer",
 ] as const;
 
+type TextBlock =
+  | {
+      kind: "paragraph";
+      text: string;
+    }
+  | {
+      kind: "numbered";
+      number: string;
+      text: string;
+    };
+
 function formatPercent(value: number) {
   return `${(value * 100).toFixed(1)}%`;
+}
+
+function splitLongParagraph(text: string) {
+  if (text.length <= 150) {
+    return [text];
+  }
+
+  const sentences = text.match(/[^。！？]+[。！？]?/g) ?? [text];
+  const groups: string[] = [];
+  let current = "";
+
+  sentences.forEach((sentence) => {
+    const next = sentence.trim();
+    if (!next) {
+      return;
+    }
+
+    if (current && current.length + next.length > 150) {
+      groups.push(current);
+      current = next;
+      return;
+    }
+
+    current = current ? `${current}${next}` : next;
+  });
+
+  if (current) {
+    groups.push(current);
+  }
+
+  return groups.length > 0 ? groups : [text];
+}
+
+function toReadableBlocks(text: string): TextBlock[] {
+  const sectionMarkers = [
+    "重要提示：",
+    "請務必注意：",
+    "我們的建議：",
+    "您可以考慮以下專科就醫：",
+    "如果您",
+    "若您",
+    "同時，",
+    "再次提醒，",
+    "請務必遵循醫囑",
+  ];
+
+  let normalized = text
+    .replace(/\r\n/g, "\n")
+    .replace(/\*\*/g, "")
+    .replace(/\*/g, "")
+    .replace(/---+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  sectionMarkers.forEach((marker) => {
+    normalized = normalized.replaceAll(marker, `\n${marker}`);
+  });
+
+  normalized = normalized.replace(/\s+(\d+\.\s*)/g, "\n$1");
+
+  const lines = normalized
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const blocks: TextBlock[] = [];
+
+  lines.forEach((line) => {
+    const numbered = line.match(/^(\d+)\.\s*(.+)$/);
+
+    if (numbered) {
+      blocks.push({
+        kind: "numbered",
+        number: numbered[1],
+        text: numbered[2].trim(),
+      });
+      return;
+    }
+
+    splitLongParagraph(line).forEach((paragraph) => {
+      blocks.push({
+        kind: "paragraph",
+        text: paragraph,
+      });
+    });
+  });
+
+  return blocks;
+}
+
+function FormattedAdviceText({ text }: { text: string }) {
+  const blocks = toReadableBlocks(text);
+
+  return (
+    <div className="formatted-advice">
+      {blocks.map((block, index) => {
+        if (block.kind === "numbered") {
+          return (
+            <div className="formatted-step" key={`${block.number}-${index}`}>
+              <span>{block.number}</span>
+              <p>{block.text}</p>
+            </div>
+          );
+        }
+
+        return <p key={index}>{block.text}</p>;
+      })}
+    </div>
+  );
 }
 
 export function ResultPanel({ result }: ResultPanelProps) {
@@ -110,7 +230,7 @@ export function ResultPanel({ result }: ResultPanelProps) {
           <Stethoscope size={18} />
           AI 就診建議
         </div>
-        <p>{result.care_guidance}</p>
+        <FormattedAdviceText text={result.care_guidance} />
       </article>
 
       <article className="detail-card explanation-card">
@@ -118,7 +238,7 @@ export function ResultPanel({ result }: ResultPanelProps) {
           <FileText size={18} />
           繁體中文衛教說明
         </div>
-        <p>{result.explanation}</p>
+        <FormattedAdviceText text={result.explanation} />
       </article>
     </section>
   );
