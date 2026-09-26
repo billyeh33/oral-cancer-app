@@ -1,4 +1,4 @@
-import type { PredictionResponse } from "./types";
+import type { AdviceResponse, PredictionResponse } from "./types";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ??
@@ -27,4 +27,31 @@ export async function analyzeImage(file: File): Promise<PredictionResponse> {
   }
 
   return (await response.json()) as PredictionResponse;
+}
+
+export async function fetchAdvice(
+  classProbabilities: PredictionResponse["class_probabilities"],
+): Promise<AdviceResponse> {
+  const response = await fetch(`${API_BASE_URL}/explain`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ class_probabilities: classProbabilities }),
+  });
+
+  if (!response.ok) {
+    throw new Error("AI 說明暫時無法產生。");
+  }
+
+  return (await response.json()) as AdviceResponse;
+}
+
+// The Render free plan sleeps when idle; calling this on page load starts waking it
+// while the user is still picking a photo.
+export async function wakeBackend(): Promise<boolean> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/health`, { cache: "no-store" });
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
