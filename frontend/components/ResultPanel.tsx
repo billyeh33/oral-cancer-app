@@ -1,10 +1,11 @@
 "use client";
 
-import { BarChart3, FileText, ShieldCheck, Stethoscope } from "lucide-react";
+import { BarChart3, FileText, LoaderCircle, ShieldCheck, Stethoscope } from "lucide-react";
 import type { PredictionResponse, RiskLevel } from "../lib/types";
 
 interface ResultPanelProps {
   result: PredictionResponse;
+  adviceLoading?: boolean;
 }
 
 const RISK_CLASS: Record<RiskLevel, string> = {
@@ -278,7 +279,21 @@ function FormattedAdviceText({ text }: { text: string }) {
   );
 }
 
-export function ResultPanel({ result }: ResultPanelProps) {
+function AdvicePlaceholder() {
+  return (
+    <div className="advice-loading" role="status">
+      <p>
+        <LoaderCircle className="spin" size={16} />
+        AI 正在整理說明…
+      </p>
+      <span className="skeleton-line" />
+      <span className="skeleton-line" />
+      <span className="skeleton-line short" />
+    </div>
+  );
+}
+
+export function ResultPanel({ result, adviceLoading = false }: ResultPanelProps) {
   return (
     <section className="result-stack" aria-live="polite">
       <article className="result-summary">
@@ -363,7 +378,11 @@ export function ResultPanel({ result }: ResultPanelProps) {
           <Stethoscope size={18} />
           AI 就診建議
         </div>
-        <FormattedAdviceText text={result.care_guidance} />
+        {adviceLoading ? (
+          <AdvicePlaceholder />
+        ) : (
+          <FormattedAdviceText text={result.care_guidance} />
+        )}
       </article>
 
       <article className="detail-card explanation-card">
@@ -371,7 +390,11 @@ export function ResultPanel({ result }: ResultPanelProps) {
           <FileText size={18} />
           繁體中文衛教說明
         </div>
-        <FormattedAdviceText text={result.explanation} />
+        {adviceLoading ? (
+          <AdvicePlaceholder />
+        ) : (
+          <FormattedAdviceText text={result.explanation} />
+        )}
       </article>
     </section>
   );

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
@@ -7,19 +8,12 @@ import torch
 from PIL import Image
 from torchvision import transforms
 
+from labels import CLASS_NAMES, RISK_LEVELS
 from model import DEFAULT_DROPOUT, HierarchicalConvNeXt
 
 
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
-
-CLASS_NAMES = ("Normal", "Benign", "OPMD", "Oral Cancer")
-RISK_LEVELS = {
-    "Normal": "低風險",
-    "Benign": "中低風險",
-    "OPMD": "中高風險",
-    "Oral Cancer": "高風險",
-}
 
 eval_transform = transforms.Compose(
     [
@@ -37,6 +31,14 @@ def select_device() -> torch.device:
         if torch.backends.mps.is_available():
             return torch.device("mps")
     return device
+
+
+def _configure_cpu_threads() -> None:
+    # Render's free instance only gets a slice of one CPU; PyTorch's default of one
+    # thread per visible core just makes those threads fight over that slice.
+    threads = os.getenv("TORCH_NUM_THREADS") or ("1" if os.getenv("RENDER") else "")
+    if threads:
+        torch.set_num_threads(int(threads))
 
 
 def _load_state_dict(weights_path: Path, device: torch.device) -> Dict[str, Any]:
@@ -58,6 +60,7 @@ def load_trained_model(
     if not resolved_path.exists():
         raise FileNotFoundError(f"Model weights not found: {resolved_path}")
 
+    _configure_cpu_threads()
     inference_device = device or select_device()
     model = HierarchicalConvNeXt(
         dropout=DEFAULT_DROPOUT,

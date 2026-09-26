@@ -30,3 +30,9 @@ export interface PredictionResponse {
   care_guidance: string;
   disclaimer: string;
 }
+
+export interface AdviceResponse {
+  explanation: string;
+  care_guidance: string;
+  source: "llm" | "fallback";
+}
