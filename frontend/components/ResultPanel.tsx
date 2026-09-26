@@ -388,7 +388,7 @@ export function ResultPanel({ result, adviceLoading = false }: ResultPanelProps)
       <article className="detail-card explanation-card">
         <div className="section-kicker">
           <FileText size={18} />
-          繁體中文衛教說明
+          衛教說明
         </div>
         {adviceLoading ? (
           <AdvicePlaceholder />

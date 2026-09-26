@@ -15,7 +15,7 @@ export default function HomePage() {
           <h1>研究型 AI 初步風險篩檢</h1>
           <p>
             使用 Hierarchical ConvNeXt-Tiny 對口腔影像進行初步風險分級，
-            搭配繁體中文衛教說明，適合專題展示與產學案 demo。
+            搭配衛教說明，適合專題展示與產學案 demo。
           </p>
           <div className="hero-actions">
             <Link className="primary-link" href="/upload">
