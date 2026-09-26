@@ -12,7 +12,7 @@
 ## 專案結構
 
 ```text
-oral-lesion-screening/
+oral-cancer-app/
 ├── backend/
 │   ├── main.py
 │   ├── labels.py
@@ -60,7 +60,7 @@ oral-lesion-screening/
 ## 本機啟動 Backend
 
 ```bash
-cd oral-lesion-screening/backend
+cd oral-cancer-app/backend
 python -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
@@ -89,7 +89,7 @@ curl http://localhost:8000/health
 ## 本機啟動 Frontend
 
 ```bash
-cd oral-lesion-screening/frontend
+cd oral-cancer-app/frontend
 npm install
 cp .env.example .env.local
 npm run dev
@@ -144,7 +144,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 ### 方式一：使用測試腳本
 
 ```bash
-cd oral-lesion-screening/backend
+cd oral-cancer-app/backend
 source .venv/bin/activate
 python test_predict.py /absolute/path/to/example.jpg
 ```
