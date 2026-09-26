@@ -15,6 +15,7 @@
 oral-lesion-screening/
 ├── backend/
 │   ├── main.py
+│   ├── labels.py
 │   ├── model.py
 │   ├── predict.py
 │   ├── test_predict.py
@@ -32,6 +33,9 @@ oral-lesion-screening/
 │   ├── app/
 │   ├── components/
 │   └── lib/
+├── .github/
+│   └── workflows/
+│       └── keep-backend-awake.yml
 ├── .gitignore
 └── README.md
 ```
@@ -121,6 +125,7 @@ CORS_ALLOW_ORIGINS=*
 - `GEMINI_API_KEY` 只放在 backend。
 - 如果你的部署平台已使用 Google SDK 慣例，也可以改用 `GOOGLE_API_KEY`。
 - 沒有設定 `GEMINI_API_KEY` 時，API 仍可正常運作，會回傳 fallback explanation。
+- `TORCH_NUM_THREADS`（選填）：CNN 推論使用的 CPU 執行緒數。在 Render 上預設為 1，因為免費方案只分到一小部分 CPU，多開執行緒反而更慢。
 - 開發期可暫用 `CORS_ALLOW_ORIGINS=*`。
 - 正式部署時建議改成指定前端網域，例如 Vercel 網址。
 
@@ -159,18 +164,17 @@ API 回傳欄位：
 - `class_probabilities`
 - `stage_probabilities`
 - `explanation`
+- `care_guidance`
 - `disclaimer`
+
+`/predict` 只做 CNN 推論，所以會馬上回傳；其中 `explanation`、`care_guidance` 是依風險等級產生的固定文字。Gemini 寫的版本由 `POST /explain` 另外取得（見下方 Backend API）。
 
 ## 影像與隱私設計
 
 - 不儲存使用者上傳的原始圖片。
 - 圖片只送入 backend CNN 推論。
 - Gemini 不會接收圖片。
-- Gemini 只接收 CNN 的文字輸出：
-  - prediction
-  - confidence
-  - risk_level
-  - class_probabilities
+- Gemini 只接收 CNN 算出的四類機率（由 backend 轉成文字後送出）。
 - `GEMINI_API_KEY` 不會暴露在 frontend。
 - `.env` 與 `.env.local` 已加入 `.gitignore`。
 
@@ -183,12 +187,13 @@ API 回傳欄位：
 - 上傳頁：
   - jpg / jpeg / png 上傳
   - 圖片預覽
+  - 進入頁面時先呼叫 `/health` 喚醒 backend，並顯示伺服器狀態
   - loading 狀態
   - 錯誤訊息
-  - AI 初步風險篩檢結果
+  - AI 初步風險篩檢結果（CNN 算完立刻顯示）
   - 四分類機率
   - 三階段機率
-  - Gemini 繁體中文衛教說明
+  - Gemini 繁體中文衛教說明與就診建議（之後由 `/explain` 補上，產生期間顯示載入中）
   - 免責聲明
 
 ## Backend API
@@ -199,7 +204,7 @@ API 回傳欄位：
 
 ### `GET /health`
 
-回傳模型是否成功載入。
+回傳模型是否已載入、是否設定 Gemini、使用的 Gemini 模型，以及 Render 上目前部署的 commit（`commit`）。backend 啟動時會在背景預先載入模型。
 
 ### `POST /predict`
 
@@ -230,10 +235,38 @@ API 回傳欄位：
       "Oral Cancer": 0.85
     }
   },
-  "explanation": "繁體中文衛教說明",
+  "explanation": "依風險等級產生的固定說明",
+  "care_guidance": "依風險等級產生的固定就診建議",
   "disclaimer": "本系統僅作為口腔影像初步風險篩檢與衛教輔助工具，不能取代醫師診斷、病理切片或正式醫療建議。若口腔潰瘍、白斑、紅斑、腫塊或疼痛持續超過兩週，請盡快至牙科、口腔外科或耳鼻喉科就醫檢查。"
 }
 ```
+
+### `POST /explain`
+
+接收 `/predict` 回傳的四類機率，呼叫一次 Gemini（關閉 thinking、要求 JSON 格式輸出），產生衛教說明與就診建議：
+
+```json
+{
+  "class_probabilities": {
+    "Normal": 0.01,
+    "Benign": 0.02,
+    "OPMD": 0.57,
+    "Oral Cancer": 0.40
+  }
+}
+```
+
+回傳：
+
+```json
+{
+  "explanation": "一段 70～140 字的白話說明",
+  "care_guidance": "1. 第一點下一步\n2. 第二點下一步",
+  "source": "llm"
+}
+```
+
+沒有設定 `GEMINI_API_KEY`、Gemini 逾時（20 秒）或輸出格式不符時，`source` 會是 `fallback`，並回傳固定文字。
 
 ## 部署到 Vercel
 
@@ -269,7 +302,19 @@ uvicorn main:app --host 0.0.0.0 --port $PORT
    - `GEMINI_MODEL`
    - `CORS_ALLOW_ORIGINS=https://your-frontend.vercel.app`
 
+### 保持喚醒
+
+Render 免費方案在 15 分鐘沒有流量後會休眠，喚醒可能要好幾分鐘。`.github/workflows/keep-backend-awake.yml` 每 10 分鐘 ping 一次 `/health` 讓它保持喚醒（網址可用 GitHub repository variable `BACKEND_URL` 覆寫）。
+
+注意：
+
+- Render 每個 workspace 每月有 750 小時免費時數，一個服務全天不休眠約用掉 744 小時；同一個 workspace 若還有其他免費服務，時數會不夠，用完後所有免費服務會暫停到下個月。
+- GitHub 的排程偶爾會延遲，服務仍可能偶爾休眠。
+- 公開 repository 超過 60 天沒有任何活動時，GitHub 會自動停用排程 workflow，需要到 Actions 頁面重新啟用。
+
 ## 部署到 Hugging Face Spaces
+
+> 2026-09 查證：Hugging Face 現在需要付費方案才能建立 Gradio / Docker Space（Static Space 仍免費），CPU Basic 硬體本身不收時數費。
 
 如果模型權重較大，或 Render 對部署大小、啟動時間、CPU 記憶體不夠友善，可改用 Hugging Face Spaces：
 
