@@ -1,11 +1,22 @@
 "use client";
 
-import { BarChart3, FileText, LoaderCircle, ShieldCheck, Stethoscope } from "lucide-react";
-import type { PredictionResponse, RiskLevel } from "../lib/types";
+import {
+  BarChart3,
+  BookOpen,
+  ClipboardList,
+  Clock,
+  ExternalLink,
+  Hospital,
+  MessageSquareText,
+  ShieldCheck,
+  Stethoscope,
+} from "lucide-react";
+import type { PredictResult, RiskLevel } from "../lib/types";
+import { LinkedText } from "./LinkedText";
+import { SourceTags } from "./SourceTags";
 
 interface ResultPanelProps {
-  result: PredictionResponse;
-  adviceLoading?: boolean;
+  result: PredictResult;
 }
 
 const RISK_CLASS: Record<RiskLevel, string> = {
@@ -15,296 +26,34 @@ const RISK_CLASS: Record<RiskLevel, string> = {
   高風險: "risk-high",
 };
 
-const CLASS_LABELS = [
-  "Normal",
-  "Benign",
-  "OPMD",
-  "Oral Cancer",
-] as const;
+const CLASS_LABELS = ["Normal", "Benign", "OPMD", "Oral Cancer"] as const;
 
-type TextBlock =
-  | {
-      kind: "heading";
-      text: string;
-    }
-  | {
-      kind: "paragraph";
-      text: string;
-    }
-  | {
-      kind: "numbered";
-      number: string;
-      title?: string;
-      text: string;
-    }
-  | {
-      kind: "bullet";
-      title?: string;
-      text: string;
-    };
-
-const SECTION_LABELS = [
-  "AI 初步風險篩檢結果說明：",
-  "AI初步風險篩檢結果說明：",
-  "重要提示：",
-  "重要提醒：",
-  "請務必注意：",
-  "就診建議：",
-  "看哪一科：",
-  "建議看診科別：",
-  "急迫性：",
-  "就診前可準備的資訊：",
-  "哪些症狀應提早就醫：",
-  "出現以下情況請立即就醫：",
-  "我們的建議：",
-  "您可以考慮以下專科就醫：",
-  "關於口腔潛在癌前病變（OPMD）：",
-  "關於口腔潛在癌前病變 (OPMD)：",
-  "關於口腔癌：",
-  "關於良性病變：",
-  "關於正常影像：",
-];
+const PREDICTION_LABELS_ZH: Record<PredictResult["prediction"], string> = {
+  Normal: "未見明顯異常",
+  Benign: "良性病灶",
+  OPMD: "口腔潛在惡性疾患",
+  "Oral Cancer": "疑似口腔癌病灶",
+};
 
 function formatPercent(value: number) {
   return `${(value * 100).toFixed(1)}%`;
 }
 
-function splitLongParagraph(text: string) {
-  if (text.length <= 150) {
-    return [text];
-  }
+export function ResultPanel({ result }: ResultPanelProps) {
+  const { care, education, handbook } = result;
 
-  const sentences = text.match(/[^。！？]+[。！？]?/g) ?? [text];
-  const groups: string[] = [];
-  let current = "";
-
-  sentences.forEach((sentence) => {
-    const next = sentence.trim();
-    if (!next) {
-      return;
-    }
-
-    if (current && current.length + next.length > 150) {
-      groups.push(current);
-      current = next;
-      return;
-    }
-
-    current = current ? `${current}${next}` : next;
-  });
-
-  if (current) {
-    groups.push(current);
-  }
-
-  return groups.length > 0 ? groups : [text];
-}
-
-function cleanInlineText(text: string) {
-  return text
-    .replace(/\*\*/g, "")
-    .replace(/\*/g, "")
-    .replace(/^[\-•]\s*/, "")
-    .replace(/\s+([，。！？；：])/g, "$1")
-    .replace(/([（「『【])\s+/g, "$1")
-    .replace(/\s+([）」』】])/g, "$1")
-    .replace(/\s{2,}/g, " ")
-    .trim();
-}
-
-function splitTitle(text: string) {
-  const cleaned = cleanInlineText(text);
-  const match = cleaned.match(/^([^：:。！？]{2,30})[：:]\s*(.*)$/);
-
-  if (!match) {
-    return { text: cleaned };
-  }
-
-  return {
-    title: match[1].trim(),
-    text: match[2].trim(),
-  };
-}
-
-function addBreakBeforeSectionLabel(text: string, label: string) {
-  let result = text;
-  let searchFrom = 0;
-
-  while (true) {
-    const index = result.indexOf(label, searchFrom);
-    if (index === -1) {
-      return result;
-    }
-
-    const previous = result.slice(Math.max(0, index - 36), index);
-    const alreadySeparated = index === 0 || /\n\s*$/.test(previous);
-    const insideNumberedTitle = /\d+\.\s*[^。！？\n]*$/.test(previous);
-    const insideSentence = /[，、：:]\s*$/.test(previous);
-
-    if (alreadySeparated || insideNumberedTitle || insideSentence) {
-      searchFrom = index + label.length;
-      continue;
-    }
-
-    result = `${result.slice(0, index)}\n${result.slice(index)}`;
-    searchFrom = index + label.length + 1;
-  }
-}
-
-function pushParagraphs(blocks: TextBlock[], text: string) {
-  splitLongParagraph(cleanInlineText(text)).forEach((paragraph) => {
-    if (paragraph) {
-      blocks.push({
-        kind: "paragraph",
-        text: paragraph,
-      });
-    }
-  });
-}
-
-function addLineAsBlocks(blocks: TextBlock[], line: string) {
-  const cleaned = cleanInlineText(line);
-  if (!cleaned) {
-    return;
-  }
-
-  const numbered = cleaned.match(/^(\d+)\.\s*(.+)$/);
-  if (numbered) {
-    const item = splitTitle(numbered[2]);
-    blocks.push({
-      kind: "numbered",
-      number: numbered[1],
-      title: item.title,
-      text: item.text,
-    });
-    return;
-  }
-
-  const bullet = line.trim().match(/^[-•]\s*(.+)$/);
-  if (bullet) {
-    const item = splitTitle(bullet[1]);
-    blocks.push({
-      kind: "bullet",
-      title: item.title,
-      text: item.text,
-    });
-    return;
-  }
-
-  const sectionLabel = SECTION_LABELS.find((label) => cleaned.startsWith(label));
-  if (sectionLabel) {
-    const title = cleanInlineText(sectionLabel).replace(/[，：:]\s*$/, "");
-    const rest = cleaned.slice(sectionLabel.length).trim();
-
-    blocks.push({
-      kind: "heading",
-      text: title,
-    });
-
-    if (rest) {
-      pushParagraphs(blocks, rest);
-    }
-    return;
-  }
-
-  pushParagraphs(blocks, cleaned);
-}
-
-function toReadableBlocks(text: string): TextBlock[] {
-  let normalized = text
-    .replace(/\r\n/g, "\n")
-    .replace(/---+/g, "\n")
-    .replace(/\*\*([^*]+?)\*\*/g, "$1")
-    .replace(/\s+\*\s+(?=\S)/g, "\n- ")
-    .replace(/\s+•\s+(?=\S)/g, "\n- ")
-    .replace(/\s+(\d+)\.\s+/g, "\n$1. ")
-    .replace(/[ \t]+/g, " ")
-    .trim();
-
-  SECTION_LABELS.forEach((label) => {
-    normalized = addBreakBeforeSectionLabel(normalized, label);
-  });
-
-  const lines = normalized
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  const blocks: TextBlock[] = [];
-
-  lines.forEach((line) => {
-    addLineAsBlocks(blocks, line);
-  });
-
-  return blocks;
-}
-
-function FormattedAdviceText({ text }: { text: string }) {
-  const blocks = toReadableBlocks(text);
-
-  return (
-    <div className="formatted-advice">
-      {blocks.map((block, index) => {
-        if (block.kind === "heading") {
-          return <h3 key={`${block.text}-${index}`}>{block.text}</h3>;
-        }
-
-        if (block.kind === "numbered") {
-          return (
-            <div className="formatted-step" key={`${block.number}-${index}`}>
-              <span>{block.number}</span>
-              <p>
-                {block.title ? <strong>{block.title}</strong> : null}
-                {block.text}
-              </p>
-            </div>
-          );
-        }
-
-        if (block.kind === "bullet") {
-          return (
-            <div className="formatted-bullet" key={`${block.text}-${index}`}>
-              <span aria-hidden="true" />
-              <p>
-                {block.title ? <strong>{block.title}</strong> : null}
-                {block.text}
-              </p>
-            </div>
-          );
-        }
-
-        return <p key={index}>{block.text}</p>;
-      })}
-    </div>
-  );
-}
-
-function AdvicePlaceholder() {
-  return (
-    <div className="advice-loading" role="status">
-      <p>
-        <LoaderCircle className="spin" size={16} />
-        AI 正在整理說明…
-      </p>
-      <span className="skeleton-line" />
-      <span className="skeleton-line" />
-      <span className="skeleton-line short" />
-    </div>
-  );
-}
-
-export function ResultPanel({ result, adviceLoading = false }: ResultPanelProps) {
   return (
     <section className="result-stack" aria-live="polite">
       <article className="result-summary">
         <div className="section-kicker">
           <ShieldCheck size={18} />
-          AI 初步風險篩檢
+          結果說明
         </div>
         <div className="summary-grid">
           <div>
             <span>AI 初步判定</span>
-            <strong>{result.prediction}</strong>
+            <strong>{PREDICTION_LABELS_ZH[result.prediction]}</strong>
+            <small>{result.prediction}</small>
           </div>
           <div>
             <span>影像風險分級</span>
@@ -317,12 +66,90 @@ export function ResultPanel({ result, adviceLoading = false }: ResultPanelProps)
             <strong>{formatPercent(result.confidence)}</strong>
           </div>
         </div>
+        <p className="report-summary">{result.summary}</p>
+      </article>
+
+      <article className="detail-card">
+        <div className="section-kicker">
+          <Stethoscope size={18} />
+          就診建議
+        </div>
+        <dl className="care-list">
+          <div>
+            <dt>
+              <Hospital size={16} />
+              看哪一科
+            </dt>
+            <dd>
+              <LinkedText links={care.links} text={care.department} />
+            </dd>
+          </div>
+          <div>
+            <dt>
+              <Clock size={16} />
+              什麼時候去
+            </dt>
+            <dd>
+              <LinkedText links={care.links} text={care.timing} />
+            </dd>
+          </div>
+          <div>
+            <dt>
+              <MessageSquareText size={16} />
+              就診時可以告訴醫師
+            </dt>
+            <dd>
+              <LinkedText links={care.links} text={care.bring} />
+            </dd>
+          </div>
+        </dl>
+        {care.sources.length > 0 ? (
+          <p className="report-basis">
+            依據
+            <SourceTags sources={care.sources} />
+          </p>
+        ) : null}
+      </article>
+
+      <article className="detail-card">
+        <div className="section-kicker">
+          <BookOpen size={18} />
+          衛教說明
+        </div>
+        {education.length > 0 ? (
+          <div className="education-list">
+            {education.map((item) => (
+              <section className="education-item" key={item.heading}>
+                <h3>{item.heading}</h3>
+                <p>
+                  <LinkedText links={item.links} text={item.text} />
+                  <SourceTags sources={item.sources} />
+                </p>
+              </section>
+            ))}
+          </div>
+        ) : null}
+        <a
+          className="handbook-link"
+          href={handbook.url}
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          <ClipboardList size={18} />
+          <span>
+            查看完整衛教手冊
+            <small>
+              {handbook.title}（{handbook.publisher}）
+            </small>
+          </span>
+          <ExternalLink size={16} />
+        </a>
       </article>
 
       <article className="detail-card">
         <div className="section-kicker">
           <BarChart3 size={18} />
-          四分類機率
+          詳細機率：四分類
         </div>
         <div className="probability-list">
           {CLASS_LABELS.map((label) => {
@@ -345,7 +172,7 @@ export function ResultPanel({ result, adviceLoading = false }: ResultPanelProps)
       <article className="detail-card">
         <div className="section-kicker">
           <BarChart3 size={18} />
-          三階段機率
+          詳細機率：三階段
         </div>
         <div className="stage-grid">
           <div className="stage-box">
@@ -371,30 +198,6 @@ export function ResultPanel({ result, adviceLoading = false }: ResultPanelProps)
             </small>
           </div>
         </div>
-      </article>
-
-      <article className="detail-card explanation-card">
-        <div className="section-kicker">
-          <Stethoscope size={18} />
-          AI 就診建議
-        </div>
-        {adviceLoading ? (
-          <AdvicePlaceholder />
-        ) : (
-          <FormattedAdviceText text={result.care_guidance} />
-        )}
-      </article>
-
-      <article className="detail-card explanation-card">
-        <div className="section-kicker">
-          <FileText size={18} />
-          衛教說明
-        </div>
-        {adviceLoading ? (
-          <AdvicePlaceholder />
-        ) : (
-          <FormattedAdviceText text={result.explanation} />
-        )}
       </article>
     </section>
   );

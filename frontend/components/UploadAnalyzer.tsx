@@ -10,8 +10,9 @@ import {
   Sparkles,
   UploadCloud,
 } from "lucide-react";
-import { analyzeImage, fetchAdvice, wakeBackend } from "../lib/api";
-import type { PredictionResponse } from "../lib/types";
+import { analyzeImage, wakeBackend } from "../lib/api";
+import type { PredictResult } from "../lib/types";
+import { AskPanel } from "./AskPanel";
 import { ResultPanel } from "./ResultPanel";
 
 const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png"];
@@ -38,8 +39,7 @@ export function UploadAnalyzer() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<PredictionResponse | null>(null);
-  const [adviceLoading, setAdviceLoading] = useState(false);
+  const [result, setResult] = useState<PredictResult | null>(null);
   const [serverStatus, setServerStatus] = useState<ServerStatus>("waking");
   // Bumped on every new analysis or file change, so a late response from an
   // earlier request can't overwrite the current one.
@@ -78,7 +78,6 @@ export function UploadAnalyzer() {
   function handleFileChange(nextFile: File | null) {
     requestIdRef.current += 1;
     setLoading(false);
-    setAdviceLoading(false);
     setResult(null);
     setError(null);
 
@@ -105,49 +104,25 @@ export function UploadAnalyzer() {
 
     const requestId = ++requestIdRef.current;
     setLoading(true);
-    setAdviceLoading(false);
     setError(null);
     setResult(null);
 
-    let prediction: PredictionResponse;
     try {
-      prediction = await analyzeImage(file);
+      // /predict returns the prediction together with all three result sections.
+      const prediction = await analyzeImage(file);
+      if (requestId === requestIdRef.current) {
+        setServerStatus("ready");
+        setResult(prediction);
+      }
     } catch (caughtError) {
       if (requestId === requestIdRef.current) {
-        const message =
-          caughtError instanceof Error
-            ? caughtError.message
-            : "分析失敗，請稍後再試。";
-        setError(message);
-        setLoading(false);
+        setError(
+          caughtError instanceof Error ? caughtError.message : "分析失敗，請稍後再試。",
+        );
       }
-      return;
-    }
-
-    if (requestId !== requestIdRef.current) {
-      return;
-    }
-
-    // Show the CNN result right away; the AI-written advice fills in afterwards.
-    setServerStatus("ready");
-    setResult(prediction);
-    setLoading(false);
-    setAdviceLoading(true);
-
-    try {
-      const advice = await fetchAdvice(prediction.class_probabilities);
-      if (requestId === requestIdRef.current) {
-        setResult({
-          ...prediction,
-          explanation: advice.explanation,
-          care_guidance: advice.care_guidance,
-        });
-      }
-    } catch {
-      // Keep the fixed texts that came with the prediction.
     } finally {
       if (requestId === requestIdRef.current) {
-        setAdviceLoading(false);
+        setLoading(false);
       }
     }
   }
@@ -229,12 +204,14 @@ export function UploadAnalyzer() {
         <ul>
           <li>請使用清晰、光線足夠的口腔影像。</li>
           <li>系統僅提供 AI 初步風險篩檢與衛教說明。</li>
-          <li>不會把圖片傳給 Gemini，LLM 只接收 CNN 的文字結果。</li>
+          <li>圖片只用於本站的 AI 篩檢，不會傳給 Gemini 或其他外部服務。</li>
           <li>若症狀持續超過兩週，建議就醫檢查。</li>
         </ul>
       </aside>
 
-      {result ? <ResultPanel adviceLoading={adviceLoading} result={result} /> : null}
+      {result ? <ResultPanel result={result} /> : null}
+
+      <AskPanel prediction={result?.prediction} />
     </div>
   );
 }
