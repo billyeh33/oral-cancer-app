@@ -6,6 +6,7 @@
 - Backend：FastAPI + PyTorch + Torchvision + PIL
 - CNN：Hierarchical ConvNeXt-Tiny
 - LLM：Gemini API，僅接收 CNN 的文字輸出，不接收圖片
+- RAG：Qdrant 向量資料庫＋官方口腔衛教文件，提供有出處的衛教問答（說明見 [backend/rag/README.md](backend/rag/README.md)）
 
 本系統只提供「AI 初步風險篩檢」與「繁體中文衛教說明」，不能取代醫師診斷、病理切片或正式醫療建議。
 
@@ -116,7 +117,7 @@ http://localhost:8000
 ```env
 GEMINI_API_KEY=your_gemini_api_key_here
 # GOOGLE_API_KEY=your_google_api_key_here
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3.5-flash-lite
 CORS_ALLOW_ORIGINS=*
 ```
 
@@ -163,18 +164,18 @@ API 回傳欄位：
 - `risk_level`
 - `class_probabilities`
 - `stage_probabilities`
-- `explanation`
-- `care_guidance`
+- `summary`、`care`、`education`、`handbook`（結果頁三個區塊與手冊連結）
+- `explanation`、`care_guidance`（舊欄位，保留相容）
 - `disclaimer`
 
-`/predict` 只做 CNN 推論，所以會馬上回傳；其中 `explanation`、`care_guidance` 是依風險等級產生的固定文字。Gemini 寫的版本由 `POST /explain` 另外取得（見下方 Backend API）。
+`/predict` 會連同結果頁內容一起回傳，不需要即時呼叫 Gemini，所以會馬上回傳。各欄位說明見 [backend/rag/README.md](backend/rag/README.md)。
 
 ## 影像與隱私設計
 
 - 不儲存使用者上傳的原始圖片。
 - 圖片只送入 backend CNN 推論。
-- Gemini 不會接收圖片。
-- Gemini 只接收 CNN 算出的四類機率（由 backend 轉成文字後送出）。
+- Gemini 不會接收圖片，也不會接收篩檢機率；結果頁內容是預先產生並人工審核的。
+- 只有衛教問答（`/ask`）會把使用者輸入的問題送給 Gemini。
 - `GEMINI_API_KEY` 不會暴露在 frontend。
 - `.env` 與 `.env.local` 已加入 `.gitignore`。
 
@@ -193,7 +194,7 @@ API 回傳欄位：
   - AI 初步風險篩檢結果（CNN 算完立刻顯示）
   - 四分類機率
   - 三階段機率
-  - Gemini 繁體中文衛教說明與就診建議（之後由 `/explain` 補上，產生期間顯示載入中）
+  - 結果說明、就診建議、衛教說明（附手冊頁碼與官方手冊連結），與 CNN 結果一起回傳
   - 免責聲明
 
 ## Backend API
@@ -235,15 +236,19 @@ API 回傳欄位：
       "Oral Cancer": 0.85
     }
   },
-  "explanation": "依風險等級產生的固定說明",
-  "care_guidance": "依風險等級產生的固定就診建議",
+  "summary": "AI 篩檢最可能為「疑似口腔癌病灶」，約 82%。……",
+  "care": { "department": "…", "timing": "…", "bring": "…", "sources": [] },
+  "education": [{ "heading": "…", "text": "…", "sources": [] }],
+  "handbook": { "title": "口腔黏膜異常患者之口腔保健指導手冊（民眾版）", "url": "https://dep.mohw.gov.tw/DOOH/cp-6545-77332-124.html" },
+  "explanation": "同 summary（舊欄位）",
+  "care_guidance": "care 的三行文字（舊欄位）",
   "disclaimer": "本系統僅作為口腔影像初步風險篩檢與衛教輔助工具，不能取代醫師診斷、病理切片或正式醫療建議。若口腔潰瘍、白斑、紅斑、腫塊或疼痛持續超過兩週，請盡快至牙科、口腔外科或耳鼻喉科就醫檢查。"
 }
 ```
 
 ### `POST /explain`
 
-接收 `/predict` 回傳的四類機率，呼叫一次 Gemini（關閉 thinking、要求 JSON 格式輸出），產生衛教說明與就診建議：
+接收四類機率，回傳和 `/predict` 相同的結果頁內容（`summary`、`care`、`education`、`handbook` 等）。`/predict` 已經包含這些內容，網站前端不會呼叫它；保留給只有機率、想重新取得說明文字的情況（例如測試）。
 
 ```json
 {
@@ -256,17 +261,9 @@ API 回傳欄位：
 }
 ```
 
-回傳：
+### `POST /ask`
 
-```json
-{
-  "explanation": "一段 70～140 字的白話說明",
-  "care_guidance": "1. 第一點下一步\n2. 第二點下一步",
-  "source": "llm"
-}
-```
-
-沒有設定 `GEMINI_API_KEY`、Gemini 逾時（20 秒）或輸出格式不符時，`source` 會是 `fallback`，並回傳固定文字。
+衛教問答（RAG）：只根據衛教文件回答並附出處。請求、回應與前端顯示方式見 [backend/rag/README.md](backend/rag/README.md)。
 
 ## 部署到 Vercel
 

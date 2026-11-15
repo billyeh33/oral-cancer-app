@@ -4,3 +4,4 @@ python-multipart>=0.0.9
 pillow>=10.0.0
 python-dotenv>=1.0.0
 google-genai>=1.0.0
+qdrant-client>=1.12.0
