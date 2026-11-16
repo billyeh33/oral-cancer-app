@@ -82,6 +82,14 @@ def _gather(top: str, second: Optional[str]) -> List[Passage]:
     return passages[:MAX_PASSAGES]
 
 
+def _passage_text(text: str, high_risk: bool) -> str:
+    """處置流程把「約二星期仍不癒的潰爛」列在轉介清單裡，模型常整段照抄，
+    對高風險結果讀起來像可以先等兩週，所以餵給模型前先拿掉這一項。"""
+    if high_risk:
+        text = re.sub(r"、?約?[兩二]星期仍不癒的口腔潰爛或糜爛", "", text)
+    return text
+
+
 def _prompt(ranked: List[Tuple[str, float]], second: Optional[str], passages: List[Passage]) -> str:
     (top, top_p) = ranked[0]
     lines = [
@@ -90,16 +98,39 @@ def _prompt(ranked: List[Tuple[str, float]], second: Optional[str], passages: Li
     if second:
         second_p = dict(ranked)[second]
         lines.append(f"第二可能：「{CLASS_LABELS_ZH[second]}」，{format_percent(second_p)}。")
+    high_risk = top in HIGH_RISK or second in HIGH_RISK
     blocks = [
-        f"[{n}] 第 {p.page} 頁" + (f"｜{p.title}" if p.title else "") + f"\n{p.text}"
+        f"[{n}] 第 {p.page} 頁" + (f"｜{p.title}" if p.title else "") + f"\n{_passage_text(p.text, high_risk)}"
         for n, p in enumerate(passages, start=1)
     ]
     return "\n".join(lines) + "\n\n參考資料：\n" + "\n\n".join(blocks)
 
 
+_CN_DIGITS = {"零": 0, "一": 1, "二": 2, "兩": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+
+
+def _cn_number(text: str) -> Optional[int]:
+    """一～九十九的國字數字，例如 八十七 → 87、十二 → 12。"""
+    if not text or any(ch not in _CN_DIGITS and ch != "十" for ch in text):
+        return None
+    if "十" not in text:
+        return _CN_DIGITS[text] if len(text) == 1 else None
+    tens, _, ones = text.partition("十")
+    return (_CN_DIGITS.get(tens, 1) if tens else 1) * 10 + (_CN_DIGITS.get(ones, 0) if ones else 0)
+
+
 def _tidy(text: str) -> str:
-    """「約佔87%」「約為80%」→「約 87%」，與結果說明的寫法一致。"""
-    text = re.sub(r"約[佔為]?\s*(\d+)\s*%", r"約 \1%", text.strip())
+    """機率寫法統一成「約 87%」，並拿掉轉折詞，和結果說明的寫法一致。"""
+    def cn_percent(match: "re.Match[str]") -> str:
+        number = _cn_number(match.group(1))
+        return f"約 {number}%" if number is not None else match.group(0)
+
+    text = text.strip()
+    text = re.sub(r"約?[佔為]?\s*百分之([零一二兩三四五六七八九十]+)", cn_percent, text)
+    text = re.sub(r"約?[佔為]?\s*([零一二兩三四五六七八九十]+)\s*%", cn_percent, text)
+    text = re.sub(r"約[佔為]?\s*(\d+)\s*%", r"約 \1%", text)
+    text = re.sub(r"(^|[。，])\s*(此外|另外|總之|綜上所述|總的來說)[，,]?", r"\1", text)
+    text = text.replace("因此", "所以")
     return text
 
 
@@ -114,12 +145,14 @@ def _problems(high_risk: bool, output: EducationOutput, passage_count: int) -> L
             problems.append(f"text length {len(item.text)}")
         if not 1 <= len(item.cited) <= 4 or any(not 1 <= n <= passage_count for n in item.cited):
             problems.append(f"bad citation {item.cited}")
-        if high_risk and _DELAY_WORDS.search(item.text):
+        if high_risk and _DELAY_WORDS.search(_tidy(item.text)):
             problems.append("delay wording")
-        if _REASSURANCE.search(item.text):
+        if _REASSURANCE.search(_tidy(item.text)):
             problems.append("reassurance")
-        if _CONNECTIVES.search(item.text):
+        if _CONNECTIVES.search(_tidy(item.text)):
             problems.append("connective")
+        if re.search(r"百分之|[一二三四五六七八九十]\s*%", _tidy(item.text)):
+            problems.append("percent wording")
     return problems
 
 
@@ -155,12 +188,12 @@ def _generate(key: Tuple[Tuple[str, float], ...]) -> Optional[Tuple[Dict[str, An
         return None
     prompt = _prompt(ranked, second, passages)
     started = time.perf_counter()
-    for attempt in range(2):
+    for attempt in range(4):
         try:
             output = _write(prompt)
         except Exception as exc:
             LOGGER.warning("Education: Gemini failed (%s), attempt %d.", getattr(exc, "code", type(exc).__name__), attempt + 1)
-            time.sleep(1.0)
+            time.sleep(1.0 + attempt)
             continue
         problems = _problems(high_risk, output, len(passages))
         if problems:
