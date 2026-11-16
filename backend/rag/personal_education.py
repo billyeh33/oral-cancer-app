@@ -19,6 +19,7 @@ differently each time (one Gemini call per upload).
 from __future__ import annotations
 
 import logging
+import os
 import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
@@ -156,13 +157,17 @@ def _problems(high_risk: bool, output: EducationOutput, passage_count: int) -> L
     return problems
 
 
-def _write(prompt: str) -> Optional[EducationOutput]:
+def _fallback_model() -> str:
+    return os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.1-flash-lite")
+
+
+def _write(prompt: str, model: str) -> Optional[EducationOutput]:
     from google.genai import types
 
     from .answer import _gemini_client
 
     response = _gemini_client(config.gemini_api_key()).models.generate_content(
-        model=config.gemini_chat_model(),
+        model=model,
         contents=prompt,
         config=types.GenerateContentConfig(
             system_instruction=SYSTEM_INSTRUCTION,
@@ -185,18 +190,21 @@ def _generate(key: Tuple[Tuple[str, float], ...]) -> Optional[Tuple[Dict[str, An
         return None
     prompt = _prompt(ranked, second, passages)
     started = time.perf_counter()
-    for attempt in range(4):
+    # 3.5 Flash-Lite often answers 503/429 at busy times, so after two tries switch
+    # to a second model that has its own quota (GEMINI_FALLBACK_MODEL).
+    models = [config.gemini_chat_model()] * 2 + [_fallback_model()] * 2
+    for attempt, model in enumerate(models):
         try:
-            output = _write(prompt)
+            output = _write(prompt, model)
         except Exception as exc:
-            LOGGER.warning("Education: Gemini failed (%s), attempt %d.", getattr(exc, "code", type(exc).__name__), attempt + 1)
-            time.sleep(1.0 + attempt)
+            LOGGER.warning("Education: %s failed (%s), attempt %d.", model, getattr(exc, "code", type(exc).__name__), attempt + 1)
+            time.sleep(1.0)
             continue
         problems = _problems(high_risk, output, len(passages))
         if problems:
-            LOGGER.warning("Education: rejected (%s), attempt %d.", "; ".join(problems), attempt + 1)
+            LOGGER.warning("Education: %s rejected (%s), attempt %d.", model, "; ".join(problems), attempt + 1)
             continue
-        LOGGER.info("Education: written in %.1fs.", time.perf_counter() - started)
+        LOGGER.info("Education: written by %s in %.1fs.", model, time.perf_counter() - started)
         return tuple(
             {
                 "heading": item.heading.strip(),
