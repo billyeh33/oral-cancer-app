@@ -90,6 +90,8 @@ export interface ResultReport {
     sources: RagSource[];
     links: LookupLink[];
   }[];
+  /** Structured education (one card per lesion); null if the content file is missing */
+  lesion_report?: LesionReport | null;
   /** The one link on the page: the official handbook */
   handbook: {
     title: string;
@@ -125,8 +127,24 @@ export interface AskResponse {
 /** One 衛教說明 point. */
 export type EducationItem = ResultReport["education"][number];
 
-/** /education: points written for this result ("llm") or the reviewed per-class text ("curated"). */
+/** One field of a lesion card, e.g. 這是什麼 / 跟口腔癌的關係. */
+export interface LesionField {
+  key: string;
+  label: string;
+  text: string;
+  sources: RagSource[];
+  links: LookupLink[];
+}
+
+/** 結構化衛教：每個病灶一張卡，欄位固定（lesion_kb.py）。 */
+export interface LesionReport {
+  intro: string;
+  lesions: { id: string; name: string; en: string; fields: LesionField[] }[];
+  reviewed?: boolean;
+}
+
+/** /education: the report written for this result ("llm") or the stored one ("curated"). */
 export interface EducationResponse {
-  education: EducationItem[];
+  lesion_report: LesionReport | null;
   source: "llm" | "curated";
 }

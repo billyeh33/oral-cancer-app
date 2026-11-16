@@ -24,8 +24,8 @@ interface ResultPanelProps {
 }
 
 const EDUCATION_NOTE: Partial<Record<EducationStatus, string>> = {
-  loading: "AI 正在依這次的結果整理衛教說明，先顯示一般內容…",
-  llm: "以下是 AI 依這次的結果，從衛教手冊整理的重點。",
+  loading: "AI 正在依這次的結果，從衛教手冊與官方資料整理說明，先顯示一般內容…",
+  llm: "以下是 AI 依這次的結果，從衛教手冊與官方資料整理的說明。",
 };
 
 const RISK_CLASS: Record<RiskLevel, string> = {
@@ -50,6 +50,7 @@ function formatPercent(value: number) {
 
 export function ResultPanel({ result, educationStatus = "idle" }: ResultPanelProps) {
   const { care, education, handbook } = result;
+  const report = result.lesion_report;
 
   return (
     <section className="result-stack" aria-live="polite">
@@ -130,7 +131,30 @@ export function ResultPanel({ result, educationStatus = "idle" }: ResultPanelPro
             {EDUCATION_NOTE[educationStatus]}
           </p>
         ) : null}
-        {education.length > 0 ? (
+        {report ? (
+          <div className="lesion-report">
+            <p className="lesion-intro">{report.intro}</p>
+            {report.lesions.map((lesion) => (
+              <section className="lesion-card" key={lesion.id}>
+                <h3>
+                  {lesion.name}
+                  <small>{lesion.en}</small>
+                </h3>
+                <dl className="lesion-fields">
+                  {lesion.fields.map((field) => (
+                    <div className="lesion-field" key={field.key}>
+                      <dt>{field.label}</dt>
+                      <dd>
+                        <LinkedText links={field.links} text={field.text} />
+                        <SourceTags sources={field.sources} />
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+            ))}
+          </div>
+        ) : education.length > 0 ? (
           <div className="education-list">
             {education.map((item) => (
               <section className="education-item" key={item.heading}>

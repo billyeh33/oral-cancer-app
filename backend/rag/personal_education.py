@@ -88,6 +88,8 @@ def _passage_text(text: str, high_risk: bool) -> str:
     對高風險結果讀起來像可以先等兩週，所以餵給模型前先拿掉這一項。"""
     if high_risk:
         text = re.sub(r"、?約?[兩二]星期仍不癒的口腔潰爛或糜爛", "", text)
+        # 官方網頁寫的「遵照醫囑每3-6個月定期追蹤」是確診後的安排，不適合寫給還沒就醫的人。
+        text = re.sub(r"，?並?遵照醫囑每\s*3\s*-\s*6\s*個月定期追蹤\s*1\s*次", "", text)
     return text
 
 

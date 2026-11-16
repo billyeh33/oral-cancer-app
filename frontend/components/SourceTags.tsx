@@ -1,8 +1,14 @@
 import type { RagSource } from "../lib/types";
 
-/** Short label for a source: "手冊 p.63" for the handbook, "處置流程" for the flowchart. */
+/** Short label: "手冊 p.63" for the handbook, "處置流程" for the flowchart, the site name for web sources. */
 export function sourceLabel(source: RagSource) {
-  return source.source_title.includes("處置流程") ? "處置流程" : `手冊 p.${source.page}`;
+  if (source.source_title.includes("處置流程")) {
+    return "處置流程";
+  }
+  if (!source.page) {
+    return source.section || "官方衛教";
+  }
+  return `手冊 p.${source.page}`;
 }
 
 /** Small page tags; hovering shows the full citation. */
