@@ -104,7 +104,7 @@ export function AskPanel({ prediction }: { prediction?: Prediction }) {
         衛教問答
       </div>
       <p className="ask-intro">
-        回答只根據衛福部《口腔黏膜異常患者之口腔保健指導手冊》與國健署處置流程，並標示出處頁碼；資料沒有提到的問題不會回答。
+        回答都查自衛福部的口腔保健手冊和國健署的處置流程，會附上頁碼讓你對照，手冊沒寫到的就不亂答。
       </p>
 
       <form className="ask-form" onSubmit={handleSubmit}>
