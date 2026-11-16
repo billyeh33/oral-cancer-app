@@ -1,4 +1,4 @@
-import type { AskResponse, Prediction, PredictResult } from "./types";
+import type { AskResponse, EducationResponse, Prediction, PredictResult } from "./types";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ??
@@ -28,6 +28,28 @@ export async function analyzeImage(file: File): Promise<PredictResult> {
   }
 
   return (await response.json()) as PredictResult;
+}
+
+/**
+ * 衛教說明 written by RAG + Gemini for these exact probabilities. Returns null on any
+ * error, so the page simply keeps the education text that came with /predict.
+ */
+export async function fetchEducation(
+  classProbabilities: PredictResult["class_probabilities"],
+): Promise<EducationResponse | null> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/education`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ class_probabilities: classProbabilities }),
+    });
+    if (!response.ok) {
+      return null;
+    }
+    return (await response.json()) as EducationResponse;
+  } catch {
+    return null;
+  }
 }
 
 /**

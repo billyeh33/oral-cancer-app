@@ -17,6 +17,7 @@ from pydantic import BaseModel, field_validator
 
 from labels import CLASS_NAMES
 from rag import answer_question, build_report, get_retriever
+from rag.personal_education import personal_education
 from rag import config as rag_config
 
 
@@ -194,6 +195,22 @@ async def predict(file: UploadFile = File(...)) -> Dict[str, Any]:
 def explain(request: ExplainRequest) -> Dict[str, Any]:
     """Result-page content for given class probabilities (same as in /predict)."""
     return build_report(request.class_probabilities)
+
+
+@app.post("/education")
+def education(request: ExplainRequest) -> Dict[str, Any]:
+    """衛教說明 written for these probabilities by RAG + Gemini.
+
+    Falls back to the reviewed per-class text (the same as in /predict) when Gemini
+    is unavailable or the answer fails the checks, so the page never goes blank."""
+    try:
+        items = personal_education(request.class_probabilities)
+    except Exception:
+        LOGGER.exception("Personal education failed.")
+        items = None
+    if items:
+        return {"education": items, "source": "llm"}
+    return {"education": build_report(request.class_probabilities)["education"], "source": "curated"}
 
 
 @app.post("/ask")

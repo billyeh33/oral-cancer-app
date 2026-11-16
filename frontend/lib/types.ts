@@ -121,3 +121,12 @@ export interface AskResponse {
   /** Lookup sites named in the answer (or, for fallback, in the shown passages) */
   links: LookupLink[];
 }
+
+/** One 衛教說明 point. */
+export type EducationItem = ResultReport["education"][number];
+
+/** /education: points written for this result ("llm") or the reviewed per-class text ("curated"). */
+export interface EducationResponse {
+  education: EducationItem[];
+  source: "llm" | "curated";
+}

@@ -15,9 +15,18 @@ import type { PredictResult, RiskLevel } from "../lib/types";
 import { LinkedText } from "./LinkedText";
 import { SourceTags } from "./SourceTags";
 
+export type EducationStatus = "idle" | "loading" | "llm" | "curated";
+
 interface ResultPanelProps {
   result: PredictResult;
+  /** loading: AI is writing points for this result; llm: they are shown */
+  educationStatus?: EducationStatus;
 }
+
+const EDUCATION_NOTE: Partial<Record<EducationStatus, string>> = {
+  loading: "AI 正在依這次的結果整理衛教說明，先顯示一般內容…",
+  llm: "以下是 AI 依這次的結果，從衛教手冊整理的重點。",
+};
 
 const RISK_CLASS: Record<RiskLevel, string> = {
   低風險: "risk-low",
@@ -39,7 +48,7 @@ function formatPercent(value: number) {
   return `${(value * 100).toFixed(1)}%`;
 }
 
-export function ResultPanel({ result }: ResultPanelProps) {
+export function ResultPanel({ result, educationStatus = "idle" }: ResultPanelProps) {
   const { care, education, handbook } = result;
 
   return (
@@ -116,6 +125,11 @@ export function ResultPanel({ result }: ResultPanelProps) {
           <BookOpen size={18} />
           衛教說明
         </div>
+        {EDUCATION_NOTE[educationStatus] ? (
+          <p className={`education-status education-status-${educationStatus}`}>
+            {EDUCATION_NOTE[educationStatus]}
+          </p>
+        ) : null}
         {education.length > 0 ? (
           <div className="education-list">
             {education.map((item) => (

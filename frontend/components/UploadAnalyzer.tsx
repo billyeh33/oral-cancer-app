@@ -10,10 +10,10 @@ import {
   Sparkles,
   UploadCloud,
 } from "lucide-react";
-import { analyzeImage, wakeBackend } from "../lib/api";
+import { analyzeImage, fetchEducation, wakeBackend } from "../lib/api";
 import type { PredictResult } from "../lib/types";
 import { AskPanel } from "./AskPanel";
-import { ResultPanel } from "./ResultPanel";
+import { ResultPanel, type EducationStatus } from "./ResultPanel";
 
 const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png"];
 const ALLOWED_TYPES = ["image/jpeg", "image/png"];
@@ -40,6 +40,7 @@ export function UploadAnalyzer() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<PredictResult | null>(null);
+  const [educationStatus, setEducationStatus] = useState<EducationStatus>("idle");
   const [serverStatus, setServerStatus] = useState<ServerStatus>("waking");
   // Bumped on every new analysis or file change, so a late response from an
   // earlier request can't overwrite the current one.
@@ -79,6 +80,7 @@ export function UploadAnalyzer() {
     requestIdRef.current += 1;
     setLoading(false);
     setResult(null);
+    setEducationStatus("idle");
     setError(null);
 
     if (!nextFile) {
@@ -95,6 +97,22 @@ export function UploadAnalyzer() {
     setFile(nextFile);
   }
 
+  // The page shows the reviewed per-class text first, then swaps in points written
+  // for this exact result once /education answers (a few seconds).
+  async function loadEducation(requestId: number, prediction: PredictResult) {
+    setEducationStatus("loading");
+    const response = await fetchEducation(prediction.class_probabilities);
+    if (requestId !== requestIdRef.current) {
+      return;
+    }
+    if (response?.source === "llm" && response.education.length > 0) {
+      setResult((current) => (current ? { ...current, education: response.education } : current));
+      setEducationStatus("llm");
+    } else {
+      setEducationStatus("curated");
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!file) {
@@ -106,6 +124,7 @@ export function UploadAnalyzer() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setEducationStatus("idle");
 
     try {
       // /predict returns the prediction together with all three result sections.
@@ -113,6 +132,7 @@ export function UploadAnalyzer() {
       if (requestId === requestIdRef.current) {
         setServerStatus("ready");
         setResult(prediction);
+        void loadEducation(requestId, prediction);
       }
     } catch (caughtError) {
       if (requestId === requestIdRef.current) {
@@ -209,7 +229,7 @@ export function UploadAnalyzer() {
         </ul>
       </aside>
 
-      {result ? <ResultPanel result={result} /> : null}
+      {result ? <ResultPanel educationStatus={educationStatus} result={result} /> : null}
 
       <AskPanel prediction={result?.prediction} />
     </div>
