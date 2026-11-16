@@ -37,7 +37,7 @@ class Passage:
 
     @property
     def citation(self) -> str:
-        label = f"《{self.source_title}》第 {self.page} 頁"
+        label = f"《{self.source_title}》第 {self.page} 頁" if self.page else f"{self.publisher}《{self.source_title}》"
         return f"{label}・{self.title}" if self.title else label
 
     def to_dict(self) -> Dict[str, Any]:

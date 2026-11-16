@@ -17,7 +17,7 @@ from pydantic import BaseModel, field_validator
 
 from labels import CLASS_NAMES
 from rag import answer_question, build_report, get_retriever
-from rag.personal_education import personal_education
+from rag.lesion_education import generate as generate_lesion_report, stored_report as stored_lesion_report
 from rag import config as rag_config
 
 
@@ -199,18 +199,17 @@ def explain(request: ExplainRequest) -> Dict[str, Any]:
 
 @app.post("/education")
 def education(request: ExplainRequest) -> Dict[str, Any]:
-    """衛教說明 written for these probabilities by RAG + Gemini.
+    """結構化衛教說明：依病灶知識庫逐一病灶、逐一欄位，由 RAG + Gemini 為這次結果撰寫。
 
-    Falls back to the reviewed per-class text (the same as in /predict) when Gemini
-    is unavailable or the answer fails the checks, so the page never goes blank."""
+    Gemini 無法使用或內容沒通過檢查時，回傳事先產生的同結構內容，頁面不會空白。"""
     try:
-        items = personal_education(request.class_probabilities)
+        report = generate_lesion_report(request.class_probabilities)
     except Exception:
-        LOGGER.exception("Personal education failed.")
-        items = None
-    if items:
-        return {"education": items, "source": "llm"}
-    return {"education": build_report(request.class_probabilities)["education"], "source": "curated"}
+        LOGGER.exception("Lesion report failed.")
+        report = None
+    if report:
+        return {"lesion_report": report, "source": "llm"}
+    return {"lesion_report": stored_lesion_report(request.class_probabilities), "source": "curated"}
 
 
 @app.post("/ask")

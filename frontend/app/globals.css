@@ -1019,3 +1019,64 @@ main {
     animation: none;
   }
 }
+
+.lesion-report {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.lesion-intro {
+  margin: 0;
+  line-height: 1.75;
+}
+
+.lesion-card {
+  border: 1px solid var(--line, #dfe7ea);
+  border-radius: 12px;
+  padding: 16px 18px;
+  background: var(--surface-soft, #f7fafb);
+}
+
+.lesion-card h3 {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 10px;
+  font-size: 1.05rem;
+}
+
+.lesion-card h3 small {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--muted, #5b707a);
+}
+
+.lesion-fields {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.lesion-field {
+  display: grid;
+  grid-template-columns: 9.5em 1fr;
+  gap: 12px;
+}
+
+.lesion-field dt {
+  font-weight: 600;
+  color: var(--ink, #16313d);
+}
+
+.lesion-field dd {
+  margin: 0;
+  line-height: 1.7;
+}
+
+@media (max-width: 720px) {
+  .lesion-field {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}

@@ -105,8 +105,9 @@ export function UploadAnalyzer() {
     if (requestId !== requestIdRef.current) {
       return;
     }
-    if (response?.source === "llm" && response.education.length > 0) {
-      setResult((current) => (current ? { ...current, education: response.education } : current));
+    if (response?.source === "llm" && response.lesion_report) {
+      const report = response.lesion_report;
+      setResult((current) => (current ? { ...current, lesion_report: report } : current));
       setEducationStatus("llm");
     } else {
       setEducationStatus("curated");

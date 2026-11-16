@@ -35,6 +35,38 @@ SOURCES: List[Dict] = [
         "publisher": "衛生福利部國民健康署",
         "page": 1,
     },
+    # 手冊沒有口腔癌專章，以下三份是政府網站的口腔癌衛教原文（2026-11-17 轉錄）。
+    # 網頁沒有頁碼，page 設 0，出處標籤改用 short。
+    {
+        "id": "oralcancer-dooh",
+        "kind": "markdown",
+        "file": "口腔癌篩檢及院所查詢_口腔健康司.md",
+        "title": "口腔癌篩檢及院所查詢",
+        "publisher": "衛生福利部口腔健康司",
+        "url": "https://dep.mohw.gov.tw/DOOH/cp-7148-80480-124.html",
+        "short": "口腔健康司",
+        "page": 0,
+    },
+    {
+        "id": "oralcancer-news",
+        "kind": "markdown",
+        "file": "口腔癌早期檢查_衛福部新聞.md",
+        "title": "國人每年超過3千人死於口腔癌 早期檢查 揪出病變",
+        "publisher": "衛生福利部（資料來源：國民健康署）",
+        "url": "https://www.mohw.gov.tw/cp-16-62388-1.html",
+        "short": "衛福部衛教",
+        "page": 0,
+    },
+    {
+        "id": "oralcancer-lazypack",
+        "kind": "markdown",
+        "file": "口腔癌防治懶人包_衛福部.md",
+        "title": "檳榔健康危害防制暨口腔癌防治懶人包",
+        "publisher": "衛生福利部",
+        "url": "https://dep.mohw.gov.tw/DOOH/cp-7148-79296-124.html",
+        "short": "口腔癌懶人包",
+        "page": 0,
+    },
 ]
 
 MAX_CHARS = 650
@@ -209,9 +241,11 @@ def _markdown_chunks(source: Dict, path: Path) -> Iterator[Chunk]:
             file=source.get("original_file", source["file"]),
             page=source.get("page", 1),
             chapter="",
-            section="",
+            # Web sources have no page number; their short name is shown as the source tag.
+            section=source.get("short", ""),
             title=heading.strip(),
             text=text,
+            extra={"url": source["url"]} if source.get("url") else {},
         )
 
 

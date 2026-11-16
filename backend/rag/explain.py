@@ -114,6 +114,12 @@ def _source(chunk_id: str) -> Dict[str, Any] | None:
     return passage_from_payload(payload).to_dict() if payload else None
 
 
+def _stored_lesion_report(class_probabilities: Dict[str, float]) -> Dict[str, Any] | None:
+    from .lesion_education import stored_report  # imported here: lesion_education imports this module
+
+    return stored_report(class_probabilities)
+
+
 def build_report(class_probabilities: Dict[str, float]) -> Dict[str, Any]:
     prediction = max(class_probabilities, key=class_probabilities.get)
     care = CARE[prediction]
@@ -147,6 +153,8 @@ def build_report(class_probabilities: Dict[str, float]) -> Dict[str, Any]:
             "links": find_links(care["department"], care["timing"], care["bring"]),
         },
         "education": education,
+        # 結構化衛教（每個病灶固定欄位），先放事先產生的版本，/education 再換成這次撰寫的版本。
+        "lesion_report": _stored_lesion_report(class_probabilities),
         "handbook": HANDBOOK_LINK,
         "content_reviewed": bool(content.get("reviewed")),
         # Older fields kept so the current frontend keeps working.
