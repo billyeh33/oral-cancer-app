@@ -12,8 +12,8 @@ The result page first shows the reviewed per-class text from explain_content.jso
      could make a high-risk user wait, no reassurance the source does not say).
 
 Anything that fails returns None and the page keeps the reviewed text.
-Results are cached by rounded probabilities, so repeated demos of one photo cost
-one Gemini call.
+Nothing is cached: each upload is written afresh, so the same photo reads a little
+differently each time (one Gemini call per upload).
 """
 
 from __future__ import annotations
@@ -166,16 +166,13 @@ def _write(prompt: str) -> Optional[EducationOutput]:
         contents=prompt,
         config=types.GenerateContentConfig(
             system_instruction=SYSTEM_INSTRUCTION,
-            temperature=0.3,
+            temperature=0.7,
             max_output_tokens=1200,
             response_mime_type="application/json",
             response_schema=EducationOutput,
         ),
     )
     return EducationOutput.model_validate_json(getattr(response, "text", "") or "")
-
-
-_CACHE: Dict[Tuple[Tuple[str, float], ...], Tuple[Dict[str, Any], ...]] = {}
 
 
 def _generate(key: Tuple[Tuple[str, float], ...]) -> Optional[Tuple[Dict[str, Any], ...]]:
@@ -216,14 +213,7 @@ def personal_education(class_probabilities: Dict[str, float]) -> Optional[List[D
     """3 education points for these probabilities, or None (keep the reviewed text)."""
     if not config.gemini_api_key():
         return None
-    # Round so the same photo (and near-identical results) reuse one Gemini call.
+    # No cache: every upload asks Gemini again, so the same photo gets freshly written text.
     key = tuple((name, round(p, 2)) for name, p in _ranked(class_probabilities))
-    # Only successes are cached, so a busy-model failure is retried on the next upload.
-    if key not in _CACHE:
-        items = _generate(key)
-        if not items:
-            return None
-        if len(_CACHE) > 256:
-            _CACHE.clear()
-        _CACHE[key] = items
-    return list(_CACHE[key])
+    items = _generate(key)
+    return list(items) if items else None
