@@ -15,8 +15,8 @@ import type { PredictResult } from "../lib/types";
 import { AskPanel } from "./AskPanel";
 import { ResultPanel, type EducationStatus } from "./ResultPanel";
 
-const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png"];
-const ALLOWED_TYPES = ["image/jpeg", "image/png"];
+const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".heic", ".heif"];
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/heic", "image/heif"];
 
 type ServerStatus = "waking" | "ready" | "offline";
 
@@ -25,6 +25,30 @@ const SERVER_STATUS_TEXT: Record<ServerStatus, string> = {
   ready: "分析伺服器已就緒。",
   offline: "暫時連不到分析伺服器，按下開始分析時會再試一次。",
 };
+
+function isHeic(file: File) {
+  const lowerName = file.name.toLowerCase();
+  return (
+    file.type === "image/heic" ||
+    file.type === "image/heif" ||
+    lowerName.endsWith(".heic") ||
+    lowerName.endsWith(".heif")
+  );
+}
+
+// iPhone 照片預設是 HEIC，大部分瀏覽器無法預覽，先在瀏覽器裡轉成 JPEG。
+// 轉檔失敗就直接上傳原檔，後端也讀得懂 HEIC。
+async function heicToJpeg(file: File): Promise<File | null> {
+  try {
+    const { default: heic2any } = await import("heic2any");
+    const output = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 });
+    const blob = Array.isArray(output) ? output[0] : output;
+    const name = file.name.replace(/\.(heic|heif)$/i, "") + ".jpg";
+    return new File([blob], name, { type: "image/jpeg" });
+  } catch {
+    return null;
+  }
+}
 
 function isSupportedImage(file: File) {
   const lowerName = file.name.toLowerCase();
@@ -37,6 +61,9 @@ function isSupportedImage(file: File) {
 export function UploadAnalyzer() {
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [originalName, setOriginalName] = useState<string | null>(null);
+  const [converting, setConverting] = useState(false);
+  const [previewable, setPreviewable] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<PredictResult | null>(null);
@@ -59,7 +86,7 @@ export function UploadAnalyzer() {
   }, []);
 
   useEffect(() => {
-    if (!file) {
+    if (!file || !previewable) {
       setPreviewUrl(null);
       return undefined;
     }
@@ -67,21 +94,28 @@ export function UploadAnalyzer() {
     const objectUrl = URL.createObjectURL(file);
     setPreviewUrl(objectUrl);
     return () => URL.revokeObjectURL(objectUrl);
-  }, [file]);
+  }, [file, previewable]);
 
   const helperText = useMemo(() => {
-    if (!file) {
-      return "支援 jpg、jpeg、png。系統不會保存原始上傳影像。";
+    if (converting) {
+      return "正在轉換 HEIC 照片…";
     }
-    return `${file.name} 已選取，可開始 AI 初步風險篩檢。`;
-  }, [file]);
+    if (!file) {
+      return "支援 jpg、jpeg、png、heic（iPhone 照片）。系統不會保存原始上傳影像。";
+    }
+    return `${originalName ?? file.name} 已選取，可開始 AI 初步風險篩檢。`;
+  }, [file, originalName, converting]);
 
-  function handleFileChange(nextFile: File | null) {
-    requestIdRef.current += 1;
+  async function handleFileChange(nextFile: File | null) {
+    const changeId = ++requestIdRef.current;
     setLoading(false);
     setResult(null);
     setEducationStatus("idle");
     setError(null);
+
+    setConverting(false);
+    setOriginalName(null);
+    setPreviewable(true);
 
     if (!nextFile) {
       setFile(null);
@@ -90,11 +124,30 @@ export function UploadAnalyzer() {
 
     if (!isSupportedImage(nextFile)) {
       setFile(null);
-      setError("請上傳 jpg、jpeg 或 png 格式的口腔影像。");
+      setError("請上傳 jpg、jpeg、png 或 heic 格式的口腔影像。");
       return;
     }
 
-    setFile(nextFile);
+    if (!isHeic(nextFile)) {
+      setFile(nextFile);
+      return;
+    }
+
+    setFile(null);
+    setConverting(true);
+    const converted = await heicToJpeg(nextFile);
+    if (changeId !== requestIdRef.current) {
+      return;
+    }
+    setConverting(false);
+    setOriginalName(nextFile.name);
+    if (converted) {
+      setFile(converted);
+    } else {
+      // 瀏覽器轉不了就上傳原檔給後端處理，只是沒有預覽。
+      setPreviewable(false);
+      setFile(nextFile);
+    }
   }
 
   // The page shows the reviewed per-class text first, then swaps in points written
@@ -116,6 +169,10 @@ export function UploadAnalyzer() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (converting) {
+      setError("照片還在轉換，請稍等一下。");
+      return;
+    }
     if (!file) {
       setError("請先選擇一張口腔影像。");
       return;
@@ -158,8 +215,8 @@ export function UploadAnalyzer() {
 
         <label className="dropzone">
           <input
-            accept=".jpg,.jpeg,.png,image/jpeg,image/png"
-            onChange={(event) => handleFileChange(event.target.files?.[0] ?? null)}
+            accept=".jpg,.jpeg,.png,.heic,.heif,image/jpeg,image/png,image/heic,image/heif"
+            onChange={(event) => void handleFileChange(event.target.files?.[0] ?? null)}
             type="file"
           />
           <UploadCloud size={28} />
@@ -179,8 +236,14 @@ export function UploadAnalyzer() {
           </div>
         ) : (
           <div className="preview-placeholder">
-            <ImagePlus size={28} />
-            <span>影像預覽會顯示在這裡</span>
+            {converting ? <LoaderCircle className="spin" size={28} /> : <ImagePlus size={28} />}
+            <span>
+              {converting
+                ? "正在轉換照片"
+                : file && !previewable
+                  ? "這個瀏覽器無法預覽 HEIC，仍可直接分析"
+                  : "影像預覽會顯示在這裡"}
+            </span>
           </div>
         )}
 
@@ -191,7 +254,7 @@ export function UploadAnalyzer() {
           </p>
         ) : null}
 
-        <button className="primary-button" disabled={loading} type="submit">
+        <button className="primary-button" disabled={loading || converting} type="submit">
           {loading ? (
             <>
               <LoaderCircle className="spin" size={18} />

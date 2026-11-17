@@ -12,7 +12,14 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
+
+try:  # iPhone 照片預設是 HEIC，Pillow 要靠 pillow-heif 才讀得到
+    from pillow_heif import register_heif_opener
+
+    register_heif_opener()
+except ImportError:  # pragma: no cover
+    pass
 from pydantic import BaseModel, field_validator
 
 from labels import CLASS_NAMES
@@ -28,7 +35,9 @@ logging.basicConfig(level=logging.INFO)
 
 MODEL_PATH = Path(__file__).with_name("best_hierarchical_convnext_mac.pth")
 MODEL_LOCK = Lock()
-ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/jpg", "image/png"}
+ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/heic", "image/heif"}
+# 有些瀏覽器不認得 HEIC，會送空白或 application/octet-stream，這時改看副檔名。
+ALLOWED_EXTENSIONS = (".jpg", ".jpeg", ".png", ".heic", ".heif")
 QUESTION_MAX_CHARS = 300
 DISCLAIMER = (
     "本系統僅作為口腔影像初步風險篩檢與衛教輔助工具，不能取代醫師診斷、"
@@ -158,10 +167,11 @@ def health() -> Dict[str, Any]:
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)) -> Dict[str, Any]:
-    if file.content_type and file.content_type not in ALLOWED_CONTENT_TYPES:
+    name_ok = (file.filename or "").lower().endswith(ALLOWED_EXTENSIONS)
+    if file.content_type and file.content_type not in ALLOWED_CONTENT_TYPES and not name_ok:
         raise HTTPException(
             status_code=400,
-            detail="Only jpg, jpeg, and png images are supported.",
+            detail="Only jpg, jpeg, png, and heic images are supported.",
         )
 
     image_bytes = await file.read()
@@ -171,7 +181,8 @@ async def predict(file: UploadFile = File(...)) -> Dict[str, Any]:
 
     try:
         with Image.open(BytesIO(image_bytes)) as uploaded_image:
-            image = uploaded_image.convert("RGB")
+            # 手機照片的方向常存在 EXIF 裡，先轉正再分析。
+            image = ImageOps.exif_transpose(uploaded_image).convert("RGB")
     except (UnidentifiedImageError, OSError):
         raise HTTPException(
             status_code=400,
