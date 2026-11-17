@@ -9,10 +9,16 @@ export async function analyzeImage(file: File): Promise<PredictResult> {
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await fetch(`${API_BASE_URL}/predict`, {
-    method: "POST",
-    body: formData,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/predict`, {
+      method: "POST",
+      body: formData,
+    });
+  } catch {
+    // 連線中斷（伺服器重開或網路問題）時瀏覽器只會說 Failed to fetch。
+    throw new Error("連不到分析伺服器，伺服器可能正在重新啟動，請等 1 分鐘後再試。");
+  }
 
   if (!response.ok) {
     let message = "分析失敗，請稍後再試。";

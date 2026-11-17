@@ -38,6 +38,7 @@ MODEL_LOCK = Lock()
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/heic", "image/heif"}
 # 有些瀏覽器不認得 HEIC，會送空白或 application/octet-stream，這時改看副檔名。
 ALLOWED_EXTENSIONS = (".jpg", ".jpeg", ".png", ".heic", ".heif")
+MAX_IMAGE_SIDE = 1600
 QUESTION_MAX_CHARS = 300
 DISCLAIMER = (
     "本系統僅作為口腔影像初步風險篩檢與衛教輔助工具，不能取代醫師診斷、"
@@ -181,6 +182,11 @@ async def predict(file: UploadFile = File(...)) -> Dict[str, Any]:
 
     try:
         with Image.open(BytesIO(image_bytes)) as uploaded_image:
+            # 手機原圖很大，免費方案只有 512 MB 記憶體，先縮小再處理（模型只用 224×224）。
+            # JPEG 用 draft 直接以低解析度解碼，其他格式解碼後立刻縮小。
+            if uploaded_image.format == "JPEG":
+                uploaded_image.draft("RGB", (MAX_IMAGE_SIDE, MAX_IMAGE_SIDE))
+            uploaded_image.thumbnail((MAX_IMAGE_SIDE, MAX_IMAGE_SIDE))
             # 手機照片的方向常存在 EXIF 裡，先轉正再分析。
             image = ImageOps.exif_transpose(uploaded_image).convert("RGB")
     except (UnidentifiedImageError, OSError):
