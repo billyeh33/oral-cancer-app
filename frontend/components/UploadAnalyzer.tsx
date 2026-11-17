@@ -11,6 +11,7 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { analyzeImage, fetchEducation, wakeBackend } from "../lib/api";
+import { isHeic, prepareImage } from "../lib/prepareImage";
 import type { PredictResult } from "../lib/types";
 import { AskPanel } from "./AskPanel";
 import { ResultPanel, type EducationStatus } from "./ResultPanel";
@@ -25,30 +26,6 @@ const SERVER_STATUS_TEXT: Record<ServerStatus, string> = {
   ready: "分析伺服器已就緒。",
   offline: "暫時連不到分析伺服器，按下開始分析時會再試一次。",
 };
-
-function isHeic(file: File) {
-  const lowerName = file.name.toLowerCase();
-  return (
-    file.type === "image/heic" ||
-    file.type === "image/heif" ||
-    lowerName.endsWith(".heic") ||
-    lowerName.endsWith(".heif")
-  );
-}
-
-// iPhone 照片預設是 HEIC，大部分瀏覽器無法預覽，先在瀏覽器裡轉成 JPEG。
-// 轉檔失敗就直接上傳原檔，後端也讀得懂 HEIC。
-async function heicToJpeg(file: File): Promise<File | null> {
-  try {
-    const { default: heic2any } = await import("heic2any");
-    const output = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 });
-    const blob = Array.isArray(output) ? output[0] : output;
-    const name = file.name.replace(/\.(heic|heif)$/i, "") + ".jpg";
-    return new File([blob], name, { type: "image/jpeg" });
-  } catch {
-    return null;
-  }
-}
 
 function isSupportedImage(file: File) {
   const lowerName = file.name.toLowerCase();
@@ -98,7 +75,7 @@ export function UploadAnalyzer() {
 
   const helperText = useMemo(() => {
     if (converting) {
-      return "正在轉換 HEIC 照片…";
+      return "正在處理照片…";
     }
     if (!file) {
       return "支援 jpg、jpeg、png、heic（iPhone 照片）。系統不會保存原始上傳影像。";
@@ -128,24 +105,19 @@ export function UploadAnalyzer() {
       return;
     }
 
-    if (!isHeic(nextFile)) {
-      setFile(nextFile);
-      return;
-    }
-
     setFile(null);
     setConverting(true);
-    const converted = await heicToJpeg(nextFile);
+    const prepared = await prepareImage(nextFile);
     if (changeId !== requestIdRef.current) {
       return;
     }
     setConverting(false);
     setOriginalName(nextFile.name);
-    if (converted) {
-      setFile(converted);
+    if (prepared) {
+      setFile(prepared);
     } else {
-      // 瀏覽器轉不了就上傳原檔給後端處理，只是沒有預覽。
-      setPreviewable(false);
+      // 瀏覽器處理不了就上傳原檔給後端，HEIC 只是沒有預覽。
+      setPreviewable(!isHeic(nextFile));
       setFile(nextFile);
     }
   }
@@ -170,7 +142,7 @@ export function UploadAnalyzer() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (converting) {
-      setError("照片還在轉換，請稍等一下。");
+      setError("照片還在處理，請稍等一下。");
       return;
     }
     if (!file) {
@@ -239,7 +211,7 @@ export function UploadAnalyzer() {
             {converting ? <LoaderCircle className="spin" size={28} /> : <ImagePlus size={28} />}
             <span>
               {converting
-                ? "正在轉換照片"
+                ? "正在處理照片"
                 : file && !previewable
                   ? "這個瀏覽器無法預覽 HEIC，仍可直接分析"
                   : "影像預覽會顯示在這裡"}
