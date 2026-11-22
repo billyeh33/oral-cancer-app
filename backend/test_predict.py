@@ -28,6 +28,7 @@ def main() -> None:
     model, device = load_trained_model(args.weights)
     with Image.open(args.image_path) as image:
         result = predict_image(image, model, device)
+    result.pop("_feature", None)
 
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
