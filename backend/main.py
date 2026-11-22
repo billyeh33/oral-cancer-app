@@ -184,7 +184,7 @@ async def predict(file: UploadFile = File(...)) -> Dict[str, Any]:
         with Image.open(BytesIO(image_bytes)) as uploaded_image:
             # 手機原圖很大，免費方案只有 512 MB 記憶體，先縮小再處理（模型只用 224×224）。
             # JPEG 用 draft 直接以低解析度解碼，其他格式解碼後立刻縮小。
-            if uploaded_image.format == "JPEG":
+            if uploaded_image.format in ("JPEG", "MPO"):  # 很多手機與相機照片是 MPO（多張 JPEG）
                 uploaded_image.draft("RGB", (MAX_IMAGE_SIDE, MAX_IMAGE_SIDE))
             uploaded_image.thumbnail((MAX_IMAGE_SIDE, MAX_IMAGE_SIDE))
             # 手機照片的方向常存在 EXIF 裡，先轉正再分析。
