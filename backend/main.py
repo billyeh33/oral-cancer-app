@@ -195,12 +195,21 @@ async def predict(file: UploadFile = File(...)) -> Dict[str, Any]:
             detail="Unable to read the uploaded image.",
         )
 
+    from ood import NOT_ORAL_MESSAGE, features_look_oral, looks_like_oral_photo
+
+    # 模型只會在四類裡選一個，X 光、風景或截圖也會被判成某一類，所以先擋掉不像口腔的照片。
+    if not looks_like_oral_photo(image):
+        raise HTTPException(status_code=422, detail=NOT_ORAL_MESSAGE)
+
     # Loading and inference are CPU-bound; running them in the threadpool keeps
     # /health and /explain responsive in the meantime.
     model, device = await run_in_threadpool(get_model)
     from predict import predict_image
 
     result = await run_in_threadpool(predict_image, image, model, device)
+    feature = result.pop("_feature")
+    if not features_look_oral(feature):
+        raise HTTPException(status_code=422, detail=NOT_ORAL_MESSAGE)
     # The full result page (summary, care, education, handbook link) needs no LLM
     # call, so it comes back with the prediction; /explain returns the same content.
     result.update(build_report(result["class_probabilities"]))

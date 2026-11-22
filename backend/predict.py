@@ -86,7 +86,9 @@ def predict_image(
     input_tensor = eval_transform(rgb_image).unsqueeze(0).to(device)
 
     with torch.inference_mode():
-        logit_s1, logit_s2, logit_s3 = model(input_tensor)
+        # 主幹特徵另外留著給 ood.py 判斷是不是口腔照片，再接三個分類頭（等同 model(input_tensor)）
+        feature = model.backbone(input_tensor).flatten(1)
+        logit_s1, logit_s2, logit_s3 = model.head_s1(feature), model.head_s2(feature), model.head_s3(feature)
         p_s1 = torch.softmax(logit_s1, dim=1)[0].detach().cpu()
         p_s2 = torch.softmax(logit_s2, dim=1)[0].detach().cpu()
         p_s3 = torch.softmax(logit_s3, dim=1)[0].detach().cpu()
@@ -108,6 +110,7 @@ def predict_image(
     confidence = class_probabilities[prediction]
 
     return {
+        "_feature": feature[0].detach().cpu().numpy(),
         "prediction": prediction,
         "confidence": confidence,
         "risk_level": RISK_LEVELS[prediction],
